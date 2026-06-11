@@ -160,6 +160,11 @@
       <input id="density" type="range" min="8" max="28" value="16" />
     </div>
 
+    <div class="field">
+      <label for="msgsize">Message size</label>
+      <input id="msgsize" type="range" min="10" max="90" value="60" />
+    </div>
+
     <div class="buttons">
       <button id="generate">⚡ Generate Artwork</button>
       <button id="filter">👓 Red filter (preview)</button>
@@ -193,7 +198,8 @@
     message: "FOLLOW THE WHITE RABBIT",
     w: 800,
     h: 500,
-    cell: 16
+    cell: 16,
+    msgSize: 0.60
   };
 
   let buffer; // offscreen graphics holding the mask of the message
@@ -205,6 +211,7 @@
     cfg.w       = clampNum(document.getElementById("w").value, 200, 2000, 800);
     cfg.h       = clampNum(document.getElementById("h").value, 200, 2000, 500);
     cfg.cell    = parseInt(document.getElementById("density").value, 10) || 16;
+    cfg.msgSize = (parseInt(document.getElementById("msgsize").value, 10) || 60) / 100;
   }
 
   function clampNum(v, lo, hi, dflt) {
@@ -236,7 +243,7 @@
       buffer.textStyle(p.BOLD);
 
       // Find the largest font size that fits the message on one line
-      let fs = cfg.h * 0.6;
+      let fs = cfg.h * cfg.msgSize;
       buffer.textSize(fs);
       const margin = cfg.w * 0.06;
       let tw = buffer.textWidth(cfg.message);
@@ -313,7 +320,7 @@
       // filter its green/blue channels vanish and the reduced red channel turns
       // it into uniform dark letters — readable regardless of the noise beneath.
       p.fill(0, 255, 255, MSG_ALPHA);            // rgb(0,255,255), ~40% opacity
-      let fs = cfg.h * 0.6;
+      let fs = cfg.h * cfg.msgSize;
       p.textSize(fs);
       const margin = cfg.w * 0.06;
       const tw = p.textWidth(cfg.message);
@@ -382,6 +389,7 @@
     document.getElementById("w").value       = 800;
     document.getElementById("h").value       = 500;
     document.getElementById("density").value = 16;
+    document.getElementById("msgsize").value = 60;
     clearFilterUI();
     instance.rebuild();
   });
