@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hidden Message Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<style>
+  :root {
+    --red: rgb(255, 0, 0);
+    --blue: rgb(0, 0, 255);
+    --ink: #1a1a1a;
+    --panel: #f4f4f5;
+    --line: #d4d4d8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: #e9e9ec;
+    color: var(--ink);
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ---- Control panel ---- */
+  #controls {
+    width: 300px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  #controls h1 {
+    font-size: 18px;
+    margin: 0 0 4px;
+    letter-spacing: -0.3px;
+  }
+  #controls p.sub {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #71717a;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #52525b;
+  }
+  .field input, .field select {
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 14px;
+    background: #fff;
+    color: var(--ink);
+  }
+  .field input:focus, .field select:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+  }
+  .row { display: flex; gap: 10px; }
+  .row .field { flex: 1; }
+
+  .buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+  button {
+    padding: 11px 14px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.05s ease, filter 0.15s ease;
+  }
+  button:active { transform: translateY(1px); }
+  #generate { background: var(--ink); color: #fff; }
+  #generate:hover { filter: brightness(1.25); }
+  #filter { background: #fff; border: 1px solid var(--line); color: var(--ink); }
+  #filter:hover { background: #fafafa; }
+  #filter.active { background: var(--red); color: #fff; border-color: var(--red); }
+  .secondary-row { display: flex; gap: 10px; }
+  .secondary-row button { flex: 1; background: #fff; border: 1px solid var(--line); color: var(--ink); }
+  .secondary-row button:hover { background: #fafafa; }
+
+  .hint {
+    font-size: 11px;
+    color: #a1a1aa;
+    line-height: 1.5;
+    border-top: 1px dashed var(--line);
+    padding-top: 14px;
+  }
+
+  /* ---- Stage ---- */
+  #stage {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 30px;
+    overflow: auto;
+  }
+  #canvas-holder canvas {
+    box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+    display: block;
+  }
+
+  /* ---- Print: show only the artwork ---- */
+  @media print {
+    body { display: block; background: #fff; }
+    #controls { display: none; }
+    #stage { padding: 0; }
+    #canvas-holder canvas { box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+  <div id="controls">
+    <div>
+      <h1>Hidden Message</h1>
+      <p class="sub">Random red text hides a blue message in plain sight. View through a red filter to make the blue vanish into readable shadow.</p>
+    </div>
+
+    <div class="field">
+      <label for="style">Red pattern style</label>
+      <select id="style">
+        <option value="letters">Random letters</option>
+        <option value="binary">Binary (0/1)</option>
+        <option value="hex">Hex code</option>
+        <option value="matrix">Matrix katakana</option>
+        <option value="symbols">Symbols / glyphs</option>
+        <option value="words">Random words</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="message">Hidden message</label>
+      <input id="message" type="text" value="FOLLOW THE WHITE RABBIT" maxlength="60" />
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="w">Width (px)</label>
+        <input id="w" type="number" value="800" min="200" max="2000" step="10" />
+      </div>
+      <div class="field">
+        <label for="h">Height (px)</label>
+        <input id="h" type="number" value="500" min="200" max="2000" step="10" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="density">Text density</label>
+      <input id="density" type="range" min="8" max="28" value="16" />
+    </div>
+
+    <div class="buttons">
+      <button id="generate">⚡ Generate Artwork</button>
+      <button id="filter">👓 Red filter (preview)</button>
+      <div class="secondary-row">
+        <button id="reset">↺ Reset</button>
+        <button id="print">🖨 Print</button>
+      </div>
+    </div>
+
+    <p class="hint">Tip: shorter, all-caps messages read best. Lower the density slider for chunkier, easier-to-spot letters.</p>
+  </div>
+
+  <div id="stage">
+    <div id="canvas-holder"></div>
+  </div>
+
+<script>
+(function () {
+  // ---- Character pools per style ----
+  const POOLS = {
+    letters: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    binary:  "01",
+    hex:     "0123456789ABCDEF",
+    matrix:  "アカサタナハマヤラワイキシチニヒミリヰウクスツヌフムユルウエケセテネヘメレヱオコソトノホモヨロヲ",
+    symbols: "★☆◆◇●○■□▲△▼▽⬟✦✧⟡✺❖✶◈⌘⍟⎔",
+    words:   ["DATA","NULL","ECHO","VOID","FLUX","NODE","SYNC","GRID","CODE","LOOP","BYTE","ZERO","WAVE","HASH","SEED","DUSK","IRON","NOVA","RUNE","HALT"]
+  };
+
+  let cfg = {
+    style: "letters",
+    message: "FOLLOW THE WHITE RABBIT",
+    w: 800,
+    h: 500,
+    cell: 16
+  };
+
+  let buffer; // offscreen graphics holding the mask of the message
+
+  // Read current values from the form into cfg
+  function readControls() {
+    cfg.style   = document.getElementById("style").value;
+    cfg.message = document.getElementById("message").value || " ";
+    cfg.w       = clampNum(document.getElementById("w").value, 200, 2000, 800);
+    cfg.h       = clampNum(document.getElementById("h").value, 200, 2000, 500);
+    cfg.cell    = parseInt(document.getElementById("density").value, 10) || 16;
+  }
+
+  function clampNum(v, lo, hi, dflt) {
+    let n = parseInt(v, 10);
+    if (isNaN(n)) n = dflt;
+    return Math.max(lo, Math.min(hi, n));
+  }
+
+  // ---- p5 sketch ----
+  const sketch = (p) => {
+
+    p.setup = function () {
+      readControls();
+      const c = p.createCanvas(cfg.w, cfg.h);
+      c.parent("canvas-holder");
+      p.noLoop();
+      build();
+    };
+
+    // Render the hidden message into an offscreen buffer so we can sample
+    // which grid cells fall inside the letter shapes.
+    function makeMask() {
+      buffer = p.createGraphics(cfg.w, cfg.h);
+      buffer.pixelDensity(1);
+      buffer.background(0);
+      buffer.fill(255);
+      buffer.noStroke();
+      buffer.textAlign(p.CENTER, p.CENTER);
+      buffer.textStyle(p.BOLD);
+
+      // Find the largest font size that fits the message on one line
+      let fs = cfg.h * 0.6;
+      buffer.textSize(fs);
+      const margin = cfg.w * 0.06;
+      let tw = buffer.textWidth(cfg.message);
+      if (tw > cfg.w - margin) {
+        fs = fs * (cfg.w - margin) / tw;
+        buffer.textSize(fs);
+      }
+      buffer.text(cfg.message, cfg.w / 2, cfg.h / 2);
+      buffer.loadPixels();
+    }
+
+    // Is the center of this cell inside the message glyphs?
+    function inMessage(cx, cy) {
+      const x = Math.floor(cx);
+      const y = Math.floor(cy);
+      if (x < 0 || y < 0 || x >= cfg.w || y >= cfg.h) return false;
+      const idx = 4 * (y * cfg.w + x);
+      return buffer.pixels[idx] > 127; // red channel of white mask
+    }
+
+    function randomGlyph() {
+      const pool = POOLS[cfg.style];
+      if (cfg.style === "words") {
+        return pool[Math.floor(p.random(pool.length))];
+      }
+      return pool.charAt(Math.floor(p.random(pool.length)));
+    }
+
+    let cells = [];        // stored grid so toggling the filter never reshuffles
+    let filterOn = false;  // simulated red-glasses preview
+
+    const P_TOP_RED = 0.40; // extra red chaos for a busier background field
+    const MSG_ALPHA = 105;  // 0-255 message opacity (~0.41). Lower = better
+                            //   hidden but fainter reveal; range ~65-130.
+
+    // Build the red-noise grid once. The hidden message itself is NOT part of
+    // the grid — it is drawn as literal text on top during render().
+    function generate() {
+      cells = [];
+      const step = cfg.cell;
+      const jitter = step * 0.22;
+      for (let y = step / 2; y < cfg.h; y += step) {
+        for (let x = step / 2; x < cfg.w; x += step) {
+          cells.push({
+            x, y,
+            redChar: randomGlyph(),
+            topChar: p.random() < P_TOP_RED ? randomGlyph() : null,
+            ox: p.random(-jitter, jitter),
+            oy: p.random(-jitter, jitter)
+          });
+        }
+      }
+    }
+
+    // Draw the stored grid; optionally overlay the simulated red filter.
+    function render() {
+      p.background(255);
+      p.textAlign(p.CENTER, p.CENTER);
+      p.textStyle(p.BOLD);
+      p.textSize(cfg.cell * 0.92);
+
+      // Red noise field — full-strength red, covers the whole canvas.
+      p.textSize(cfg.cell * 0.92);
+      p.fill(255, 0, 0);                         // rgb(255,0,0)
+      for (const c of cells) {
+        p.text(c.redChar, c.x, c.y);
+        if (c.topChar) {                         // extra red chaos
+          p.text(c.topChar, c.x + c.ox, c.y + c.oy);
+        }
+      }
+
+      // The hidden message: the exact string in CYAN (red's complement) at low
+      // opacity. Faint on white to the naked eye, but under the multiply-red
+      // filter its green/blue channels vanish and the reduced red channel turns
+      // it into uniform dark letters — readable regardless of the noise beneath.
+      p.fill(0, 255, 255, MSG_ALPHA);            // rgb(0,255,255), ~40% opacity
+      let fs = cfg.h * 0.6;
+      p.textSize(fs);
+      const margin = cfg.w * 0.06;
+      const tw = p.textWidth(cfg.message);
+      if (tw > cfg.w - margin) {
+        fs = fs * (cfg.w - margin) / tw;
+        p.textSize(fs);
+      }
+      p.text(cfg.message, cfg.w / 2, cfg.h / 2);
+
+      // Simulated red glasses: MULTIPLY by pure red keeps the red channel and
+      // zeroes green+blue everywhere — red marks merge into the background,
+      // blue marks become black. Optically the same as a red gel filter.
+      if (filterOn) {
+        p.blendMode(p.MULTIPLY);
+        p.noStroke();
+        p.fill(255, 0, 0);
+        p.rect(0, 0, cfg.w, cfg.h);
+        p.blendMode(p.BLEND);
+      }
+    }
+
+    function build() {
+      generate();
+      render();
+    }
+
+    // expose controls to the outside
+    p.rebuild = function () {
+      readControls();
+      p.resizeCanvas(cfg.w, cfg.h);
+      build();
+    };
+    p.toggleFilter = function () {
+      filterOn = !filterOn;
+      render();          // re-draw the SAME grid, just with/without the filter
+      return filterOn;
+    };
+    p.setFilter = function (on) { filterOn = on; };
+  };
+
+  const instance = new p5(sketch);
+
+  // ---- Wire up buttons ----
+  const filterBtn = document.getElementById("filter");
+
+  function clearFilterUI() {
+    instance.setFilter(false);
+    filterBtn.classList.remove("active");
+  }
+
+  document.getElementById("generate").addEventListener("click", () => {
+    clearFilterUI();          // always reveal the *hidden* state after generating
+    instance.rebuild();
+  });
+
+  filterBtn.addEventListener("click", () => {
+    const on = instance.toggleFilter();
+    filterBtn.classList.toggle("active", on);
+  });
+
+  document.getElementById("print").addEventListener("click", () => window.print());
+
+  document.getElementById("reset").addEventListener("click", () => {
+    document.getElementById("style").value   = "letters";
+    document.getElementById("message").value = "FOLLOW THE WHITE RABBIT";
+    document.getElementById("w").value       = 800;
+    document.getElementById("h").value       = 500;
+    document.getElementById("density").value = 16;
+    clearFilterUI();
+    instance.rebuild();
+  });
+
+  // Regenerate on Enter inside the message field
+  document.getElementById("message").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { clearFilterUI(); instance.rebuild(); }
+  });
+})();
+</script>
+</body>
+</html>
