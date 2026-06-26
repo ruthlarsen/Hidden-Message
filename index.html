@@ -52,6 +52,14 @@
     text-transform: uppercase;
     letter-spacing: 0.4px;
     color: #52525b;
+    display: flex;
+    justify-content: space-between;
+  }
+  .field label .val {
+    font-weight: 400;
+    color: #a1a1aa;
+    text-transform: none;
+    letter-spacing: 0;
   }
   .field input, .field select, .field textarea {
     padding: 9px 10px;
@@ -85,6 +93,14 @@
     transition: transform 0.05s ease, filter 0.15s ease;
   }
   button:active { transform: translateY(1px); }
+  button:focus-visible {
+    outline: 3px solid #6366f1;
+    outline-offset: 2px;
+  }
+  input[type="range"]:focus-visible {
+    outline: 3px solid #6366f1;
+    outline-offset: 3px;
+  }
   #generate { background: var(--ink); color: #fff; }
   #generate:hover { filter: brightness(1.25); }
   #filter, #orient { background: #fff; border: 1px solid var(--line); color: var(--ink); }
@@ -138,12 +154,12 @@
     </div>
 
     <div class="field">
-      <label for="density">Text density</label>
+      <label for="density">Text density <span id="density-val" class="val">16</span></label>
       <input id="density" type="range" min="8" max="28" value="16" />
     </div>
 
     <div class="field">
-      <label for="msgsize">Message font size (px)</label>
+      <label for="msgsize">Message font size <span id="msgsize-val" class="val">36px</span></label>
       <input id="msgsize" type="range" min="8" max="120" value="36" />
     </div>
 
@@ -157,7 +173,7 @@
       </div>
     </div>
 
-    <p class="hint">Tip: shorter, all-caps messages read best. Lower the density slider for chunkier, easier-to-spot letters.</p>
+    <p class="hint">Tip: shorter, all-caps messages read best. Lower the density slider for chunkier letters. Use Tab to move between fields, arrow keys on sliders, and ⌘↵ / Ctrl↵ to generate from the message field.</p>
   </div>
 
   <div id="stage">
@@ -354,8 +370,27 @@
     document.getElementById("message").value = "FIND YOUR MEANING.";
     document.getElementById("density").value = 16;
     document.getElementById("msgsize").value = 36;
+    document.getElementById("density-val").textContent = "16";
+    document.getElementById("msgsize-val").textContent = "36px";
     clearFilterUI();
     instance.rebuild();
+  });
+
+  // Live slider value display
+  document.getElementById("density").addEventListener("input", (e) => {
+    document.getElementById("density-val").textContent = e.target.value;
+  });
+  document.getElementById("msgsize").addEventListener("input", (e) => {
+    document.getElementById("msgsize-val").textContent = e.target.value + "px";
+  });
+
+  // Ctrl/Cmd+Enter in the message textarea triggers Generate
+  document.getElementById("message").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      clearFilterUI();
+      instance.rebuild();
+    }
   });
 
   let isPortrait = true;
