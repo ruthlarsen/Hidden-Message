@@ -82,8 +82,8 @@
   button:active { transform: translateY(1px); }
   #generate { background: var(--ink); color: #fff; }
   #generate:hover { filter: brightness(1.25); }
-  #filter { background: #fff; border: 1px solid var(--line); color: var(--ink); }
-  #filter:hover { background: #fafafa; }
+  #filter, #orient { background: #fff; border: 1px solid var(--line); color: var(--ink); }
+  #filter:hover, #orient:hover { background: #fafafa; }
   #filter.active { background: var(--red); color: #fff; border-color: var(--red); }
   .secondary-row { display: flex; gap: 10px; }
   .secondary-row button { flex: 1; background: #fff; border: 1px solid var(--line); color: var(--ink); }
@@ -128,31 +128,8 @@
     </div>
 
     <div class="field">
-      <label for="style">Red pattern style</label>
-      <select id="style">
-        <option value="letters">Random letters</option>
-        <option value="binary">Binary (0/1)</option>
-        <option value="hex">Hex code</option>
-        <option value="matrix">Matrix katakana</option>
-        <option value="symbols">Symbols / glyphs</option>
-        <option value="words">Random words</option>
-      </select>
-    </div>
-
-    <div class="field">
       <label for="message">Hidden message</label>
       <input id="message" type="text" value="FOLLOW THE WHITE RABBIT" maxlength="60" />
-    </div>
-
-    <div class="row">
-      <div class="field">
-        <label for="w">Width (px)</label>
-        <input id="w" type="number" value="800" min="200" max="2000" step="10" />
-      </div>
-      <div class="field">
-        <label for="h">Height (px)</label>
-        <input id="h" type="number" value="500" min="200" max="2000" step="10" />
-      </div>
     </div>
 
     <div class="field">
@@ -162,12 +139,13 @@
 
     <div class="field">
       <label for="msgsize">Message size</label>
-      <input id="msgsize" type="range" min="10" max="90" value="60" />
+      <input id="msgsize" type="range" min="5" max="90" value="60" />
     </div>
 
     <div class="buttons">
       <button id="generate">⚡ Generate Artwork</button>
       <button id="filter">👓 Red filter (preview)</button>
+      <button id="orient">Switch to Landscape</button>
       <div class="secondary-row">
         <button id="reset">↺ Reset</button>
         <button id="print">🖨 Print</button>
@@ -183,41 +161,21 @@
 
 <script>
 (function () {
-  // ---- Character pools per style ----
-  const POOLS = {
-    letters: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    binary:  "01",
-    hex:     "0123456789ABCDEF",
-    matrix:  "アカサタナハマヤラワイキシチニヒミリヰウクスツヌフムユルウエケセテネヘメレヱオコソトノホモヨロヲ",
-    symbols: "★☆◆◇●○■□▲△▼▽⬟✦✧⟡✺❖✶◈⌘⍟⎔",
-    words:   ["DATA","NULL","ECHO","VOID","FLUX","NODE","SYNC","GRID","CODE","LOOP","BYTE","ZERO","WAVE","HASH","SEED","DUSK","IRON","NOVA","RUNE","HALT"]
-  };
+  // ---- Source text streamed sequentially across all three noise layers ----
+  const SOURCE_TEXT = "This Supplemental Privacy Policy supplements the Meta Privacy Policy and applies to your and your child's use of a Meta account and access to Meta Platforms Technologies Products. If you are a parent or guardian of a child between the ages of 10 and 12 (age may vary by region) and wish to create a Meta account for your child, please review the Parent Privacy Disclosure that describes how Meta collects, uses, and discloses your child's personal information. After you create a Meta account for your child, we will collect, use, and disclose your child's information much like any other Meta account. This Supplemental Privacy Policy applies in full to both adults and children. To the extent there are privacy practices specific to your child's Meta account, those differences are outlined in the Children's Privacy Highlight at the top of each relevant section of this Supplemental Privacy Policy. Note, the Meta Privacy Policy does not apply to the processing of your child's personal information. Meta offers a variety of hardware and software products and services related to or in connection with those products as part of Meta Platforms Technologies. The hardware, services, features, apps, technologies and software products described in the Supplemental Meta Platforms Technologies Terms of Service, and subject to this policy, include Meta VR Products, Meta Wearable Products, and other Meta Platforms Technologies Products listed here, any of which may be updated from time to time. We encourage you to read our Meta Privacy Policy and this Supplemental Meta Platforms Technologies Privacy Policy because we want you to understand what information we collect, and how we use and share it. In the Meta Privacy Policy, we describe the information we process to support Meta Products. This Supplemental Privacy Policy adds to the Meta Privacy Policy by explaining the additional information we process to support MPT Products and by providing more details about how we process that information. Below you will find an overview of the ways in which we collect, use, and share information.";
 
   let cfg = {
-    style: "letters",
     message: "FOLLOW THE WHITE RABBIT",
-    w: 800,
-    h: 500,
+    w: 600,
+    h: 900,
     cell: 16,
     msgSize: 0.60
   };
 
-  let buffer; // offscreen graphics holding the mask of the message
-
-  // Read current values from the form into cfg
   function readControls() {
-    cfg.style   = document.getElementById("style").value;
     cfg.message = document.getElementById("message").value || " ";
-    cfg.w       = clampNum(document.getElementById("w").value, 200, 2000, 800);
-    cfg.h       = clampNum(document.getElementById("h").value, 200, 2000, 500);
     cfg.cell    = parseInt(document.getElementById("density").value, 10) || 16;
     cfg.msgSize = (parseInt(document.getElementById("msgsize").value, 10) || 60) / 100;
-  }
-
-  function clampNum(v, lo, hi, dflt) {
-    let n = parseInt(v, 10);
-    if (isNaN(n)) n = dflt;
-    return Math.max(lo, Math.min(hi, n));
   }
 
   // ---- p5 sketch ----
@@ -231,95 +189,67 @@
       build();
     };
 
-    // Render the hidden message into an offscreen buffer so we can sample
-    // which grid cells fall inside the letter shapes.
-    function makeMask() {
-      buffer = p.createGraphics(cfg.w, cfg.h);
-      buffer.pixelDensity(1);
-      buffer.background(0);
-      buffer.fill(255);
-      buffer.noStroke();
-      buffer.textAlign(p.CENTER, p.CENTER);
-      buffer.textStyle(p.BOLD);
+    // Build one layer: stream SOURCE_TEXT sequentially at the given font size,
+    // starting at startIdx, skipping spaces, repeating as needed to fill canvas.
+    function generateLayer(fontSize, startIdx) {
+      const result = [];
+      const stepX = fontSize * 0.58;
+      const stepY = fontSize * 1.2;
+      const jitter = fontSize * 0.04;
+      let idx = startIdx;
 
-      // Find the largest font size that fits the message on one line
-      let fs = cfg.h * cfg.msgSize;
-      buffer.textSize(fs);
-      const margin = cfg.w * 0.06;
-      let tw = buffer.textWidth(cfg.message);
-      if (tw > cfg.w - margin) {
-        fs = fs * (cfg.w - margin) / tw;
-        buffer.textSize(fs);
-      }
-      buffer.text(cfg.message, cfg.w / 2, cfg.h / 2);
-      buffer.loadPixels();
-    }
-
-    // Is the center of this cell inside the message glyphs?
-    function inMessage(cx, cy) {
-      const x = Math.floor(cx);
-      const y = Math.floor(cy);
-      if (x < 0 || y < 0 || x >= cfg.w || y >= cfg.h) return false;
-      const idx = 4 * (y * cfg.w + x);
-      return buffer.pixels[idx] > 127; // red channel of white mask
-    }
-
-    function randomGlyph() {
-      const pool = POOLS[cfg.style];
-      if (cfg.style === "words") {
-        return pool[Math.floor(p.random(pool.length))];
-      }
-      return pool.charAt(Math.floor(p.random(pool.length)));
-    }
-
-    let cells = [];        // stored grid so toggling the filter never reshuffles
-    let filterOn = false;  // simulated red-glasses preview
-
-    const P_TOP_RED = 0.40; // extra red chaos for a busier background field
-    const MSG_ALPHA = 105;  // 0-255 message opacity (~0.41). Lower = better
-                            //   hidden but fainter reveal; range ~65-130.
-
-    // Build the red-noise grid once. The hidden message itself is NOT part of
-    // the grid — it is drawn as literal text on top during render().
-    function generate() {
-      cells = [];
-      const step = cfg.cell;
-      const jitter = step * 0.22;
-      for (let y = step / 2; y < cfg.h; y += step) {
-        for (let x = step / 2; x < cfg.w; x += step) {
-          cells.push({
-            x, y,
-            redChar: randomGlyph(),
-            topChar: p.random() < P_TOP_RED ? randomGlyph() : null,
+      for (let y = stepY * 0.6; y < cfg.h + stepY * 0.4; y += stepY) {
+        for (let x = stepX * 0.5; x < cfg.w; x += stepX) {
+          let ch = SOURCE_TEXT[idx % SOURCE_TEXT.length];
+          idx++;
+          if (ch === ' ') { continue; }
+          result.push({
+            x, y, ch,
             ox: p.random(-jitter, jitter),
             oy: p.random(-jitter, jitter)
           });
         }
       }
+      return result;
     }
 
-    // Draw the stored grid; optionally overlay the simulated red filter.
+    let layers = [];
+    let filterOn = false;
+
+    const MSG_ALPHA = 55;
+
+    function generate() {
+      const sizeLg = cfg.cell * 2.5;
+      const sizeMd = cfg.cell * 1.0;
+      const sizeSm = cfg.cell * 0.5;
+
+      // Stagger start positions so each layer shows a different part of the text
+      layers = [
+        { cells: generateLayer(sizeLg,   0), fontSize: sizeLg },
+        { cells: generateLayer(sizeMd, 120), fontSize: sizeMd },
+        { cells: generateLayer(sizeSm, 350), fontSize: sizeSm },
+      ];
+    }
+
     function render() {
       p.background(255);
       p.textAlign(p.CENTER, p.CENTER);
       p.textStyle(p.BOLD);
-      p.textSize(cfg.cell * 0.92);
+      p.noStroke();
 
-      // Red noise field — full-strength red, covers the whole canvas.
-      p.textSize(cfg.cell * 0.92);
-      p.fill(255, 0, 0);                         // rgb(255,0,0)
-      for (const c of cells) {
-        p.text(c.redChar, c.x, c.y);
-        if (c.topChar) {                         // extra red chaos
-          p.text(c.topChar, c.x + c.ox, c.y + c.oy);
+      // Red noise: large layer first (bottom), medium, then small (top)
+      p.fill(255, 0, 0);
+      for (const layer of layers) {
+        p.textSize(layer.fontSize);
+        for (const c of layer.cells) {
+          p.text(c.ch, c.x + c.ox, c.y + c.oy);
         }
       }
 
-      // The hidden message: the exact string in CYAN (red's complement) at low
-      // opacity. Faint on white to the naked eye, but under the multiply-red
-      // filter its green/blue channels vanish and the reduced red channel turns
-      // it into uniform dark letters — readable regardless of the noise beneath.
-      p.fill(0, 255, 255, MSG_ALPHA);            // rgb(0,255,255), ~40% opacity
+      // Hidden message: cyan at low opacity — invisible to naked eye,
+      // readable through a red filter (MULTIPLY zeroes the G+B channels).
+      p.textStyle(p.NORMAL);
+      p.fill(0, 255, 255, MSG_ALPHA);
       let fs = cfg.h * cfg.msgSize;
       p.textSize(fs);
       const margin = cfg.w * 0.06;
@@ -330,12 +260,8 @@
       }
       p.text(cfg.message, cfg.w / 2, cfg.h / 2);
 
-      // Simulated red glasses: MULTIPLY by pure red keeps the red channel and
-      // zeroes green+blue everywhere — red marks merge into the background,
-      // blue marks become black. Optically the same as a red gel filter.
       if (filterOn) {
         p.blendMode(p.MULTIPLY);
-        p.noStroke();
         p.fill(255, 0, 0);
         p.rect(0, 0, cfg.w, cfg.h);
         p.blendMode(p.BLEND);
@@ -347,15 +273,18 @@
       render();
     }
 
-    // expose controls to the outside
     p.rebuild = function () {
       readControls();
-      p.resizeCanvas(cfg.w, cfg.h);
+      build();
+    };
+    p.setSize = function (w, h) {
+      cfg.w = w; cfg.h = h;
+      p.resizeCanvas(w, h);
       build();
     };
     p.toggleFilter = function () {
       filterOn = !filterOn;
-      render();          // re-draw the SAME grid, just with/without the filter
+      render();
       return filterOn;
     };
     p.setFilter = function (on) { filterOn = on; };
@@ -372,7 +301,7 @@
   }
 
   document.getElementById("generate").addEventListener("click", () => {
-    clearFilterUI();          // always reveal the *hidden* state after generating
+    clearFilterUI();
     instance.rebuild();
   });
 
@@ -384,17 +313,26 @@
   document.getElementById("print").addEventListener("click", () => window.print());
 
   document.getElementById("reset").addEventListener("click", () => {
-    document.getElementById("style").value   = "letters";
     document.getElementById("message").value = "FOLLOW THE WHITE RABBIT";
-    document.getElementById("w").value       = 800;
-    document.getElementById("h").value       = 500;
     document.getElementById("density").value = 16;
     document.getElementById("msgsize").value = 60;
     clearFilterUI();
     instance.rebuild();
   });
 
-  // Regenerate on Enter inside the message field
+  let isPortrait = true;
+  document.getElementById("orient").addEventListener("click", () => {
+    isPortrait = !isPortrait;
+    clearFilterUI();
+    if (isPortrait) {
+      instance.setSize(600, 900);
+      document.getElementById("orient").textContent = "Switch to Landscape";
+    } else {
+      instance.setSize(900, 600);
+      document.getElementById("orient").textContent = "Switch to Portrait";
+    }
+  });
+
   document.getElementById("message").addEventListener("keydown", (e) => {
     if (e.key === "Enter") { clearFilterUI(); instance.rebuild(); }
   });
