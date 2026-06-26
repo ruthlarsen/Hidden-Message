@@ -128,23 +128,28 @@
     overflow: auto;
   }
   #canvas-holder {
-    line-height: 0; /* remove inline-block gap */
+    line-height: 0;
   }
   #canvas-holder canvas {
     box-shadow: 0 10px 40px rgba(0,0,0,0.25);
     display: block;
-    max-height: calc(100vh - 60px);
-    width: auto;
-    height: auto;
+    /* !important overrides p5's inline style.width/height so CSS controls display size */
+    width: auto !important;
+    height: auto !important;
+    max-width: calc(100vw - 360px) !important;
+    max-height: calc(100vh - 60px) !important;
   }
 
   /* ---- Print: Canon Selphy CP1500 — 4×6" at 300 DPI ---- */
   @media print {
-    body { display: block; background: #fff; }
+    @page { margin: 0; }
+    body { display: block; background: #fff; margin: 0; padding: 0; }
     #controls { display: none; }
-    #stage { padding: 0; display: flex; }
+    #stage { display: block; padding: 0; margin: 0; }
+    #canvas-holder { display: block; line-height: 0; margin: 0; }
     #canvas-holder canvas {
       box-shadow: none;
+      display: block;
       max-height: none !important;
       width: 4in !important;
       height: 6in !important;
@@ -217,22 +222,11 @@
   // ---- p5 sketch ----
   const sketch = (p) => {
 
-    let canvasEl;
-
-    function clearInlineSize() {
-      if (canvasEl) {
-        canvasEl.style.removeProperty('width');
-        canvasEl.style.removeProperty('height');
-      }
-    }
-
     p.setup = function () {
       readControls();
       p.pixelDensity(1);
       const c = p.createCanvas(cfg.w, cfg.h);
       c.parent("canvas-holder");
-      canvasEl = c.elt;
-      clearInlineSize();
       p.noLoop();
       build();
     };
@@ -361,7 +355,6 @@
     p.setSize = function (w, h) {
       cfg.w = w; cfg.h = h;
       p.resizeCanvas(w, h);
-      clearInlineSize();
       build();
     };
     p.toggleFilter = function () {
@@ -393,6 +386,20 @@
   });
 
   document.getElementById("print").addEventListener("click", () => window.print());
+
+  // Inject the correct @page size before printing so the Selphy CP1500
+  // receives exactly 4×6" (portrait) or 6×4" (landscape) with no margins.
+  window.addEventListener("beforeprint", () => {
+    const size = isPortrait ? "4in 6in" : "6in 4in";
+    const s = document.createElement("style");
+    s.id = "page-size-rule";
+    s.textContent = `@page { size: ${size}; margin: 0; }`;
+    document.head.appendChild(s);
+  });
+  window.addEventListener("afterprint", () => {
+    const s = document.getElementById("page-size-rule");
+    if (s) s.remove();
+  });
 
   document.getElementById("reset").addEventListener("click", () => {
     document.getElementById("message").value = "FIND YOUR MEANING.";
