@@ -127,12 +127,15 @@
     padding: 30px;
     overflow: auto;
   }
+  #canvas-holder {
+    line-height: 0; /* remove inline-block gap */
+  }
   #canvas-holder canvas {
     box-shadow: 0 10px 40px rgba(0,0,0,0.25);
     display: block;
-    /* Scale the high-res canvas down to fit the screen */
     max-height: calc(100vh - 60px);
     width: auto;
+    height: auto;
   }
 
   /* ---- Print: Canon Selphy CP1500 — 4×6" at 300 DPI ---- */
@@ -214,10 +217,22 @@
   // ---- p5 sketch ----
   const sketch = (p) => {
 
+    let canvasEl;
+
+    function clearInlineSize() {
+      if (canvasEl) {
+        canvasEl.style.removeProperty('width');
+        canvasEl.style.removeProperty('height');
+      }
+    }
+
     p.setup = function () {
       readControls();
+      p.pixelDensity(1);
       const c = p.createCanvas(cfg.w, cfg.h);
       c.parent("canvas-holder");
+      canvasEl = c.elt;
+      clearInlineSize();
       p.noLoop();
       build();
     };
@@ -346,6 +361,7 @@
     p.setSize = function (w, h) {
       cfg.w = w; cfg.h = h;
       p.resizeCanvas(w, h);
+      clearInlineSize();
       build();
     };
     p.toggleFilter = function () {
