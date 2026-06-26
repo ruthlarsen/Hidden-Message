@@ -53,15 +53,20 @@
     letter-spacing: 0.4px;
     color: #52525b;
   }
-  .field input, .field select {
+  .field input, .field select, .field textarea {
     padding: 9px 10px;
     border: 1px solid var(--line);
     border-radius: 8px;
     font-size: 14px;
     background: #fff;
     color: var(--ink);
+    font-family: inherit;
   }
-  .field input:focus, .field select:focus {
+  .field textarea {
+    resize: vertical;
+    line-height: 1.45;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
     outline: none;
     border-color: #6366f1;
     box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
@@ -123,13 +128,13 @@
 <body>
   <div id="controls">
     <div>
-      <h1>Hidden Message</h1>
-      <p class="sub">Random red text hides a blue message in plain sight. View through a red filter to make the blue vanish into readable shadow.</p>
+      <h1>Anaglyph Generator</h1>
+      <p class="sub"> Add your message to create your own anaglyph. Once your message is perfected, hit the print button, and then grab your ANGTFT glasses to decode the message.</p>
     </div>
 
     <div class="field">
       <label for="message">Hidden message</label>
-      <input id="message" type="text" value="FOLLOW THE WHITE RABBIT" maxlength="60" />
+      <textarea id="message" rows="4">FIND YOUR MEANING.</textarea>
     </div>
 
     <div class="field">
@@ -138,8 +143,8 @@
     </div>
 
     <div class="field">
-      <label for="msgsize">Message size</label>
-      <input id="msgsize" type="range" min="5" max="90" value="60" />
+      <label for="msgsize">Message font size (px)</label>
+      <input id="msgsize" type="range" min="8" max="120" value="36" />
     </div>
 
     <div class="buttons">
@@ -165,17 +170,17 @@
   const SOURCE_TEXT = "This Supplemental Privacy Policy supplements the Meta Privacy Policy and applies to your and your child's use of a Meta account and access to Meta Platforms Technologies Products. If you are a parent or guardian of a child between the ages of 10 and 12 (age may vary by region) and wish to create a Meta account for your child, please review the Parent Privacy Disclosure that describes how Meta collects, uses, and discloses your child's personal information. After you create a Meta account for your child, we will collect, use, and disclose your child's information much like any other Meta account. This Supplemental Privacy Policy applies in full to both adults and children. To the extent there are privacy practices specific to your child's Meta account, those differences are outlined in the Children's Privacy Highlight at the top of each relevant section of this Supplemental Privacy Policy. Note, the Meta Privacy Policy does not apply to the processing of your child's personal information. Meta offers a variety of hardware and software products and services related to or in connection with those products as part of Meta Platforms Technologies. The hardware, services, features, apps, technologies and software products described in the Supplemental Meta Platforms Technologies Terms of Service, and subject to this policy, include Meta VR Products, Meta Wearable Products, and other Meta Platforms Technologies Products listed here, any of which may be updated from time to time. We encourage you to read our Meta Privacy Policy and this Supplemental Meta Platforms Technologies Privacy Policy because we want you to understand what information we collect, and how we use and share it. In the Meta Privacy Policy, we describe the information we process to support Meta Products. This Supplemental Privacy Policy adds to the Meta Privacy Policy by explaining the additional information we process to support MPT Products and by providing more details about how we process that information. Below you will find an overview of the ways in which we collect, use, and share information.";
 
   let cfg = {
-    message: "FOLLOW THE WHITE RABBIT",
+    message: "FIND YOUR MEANING.",
     w: 600,
     h: 900,
     cell: 16,
-    msgSize: 0.60
+    msgSize: 36
   };
 
   function readControls() {
     cfg.message = document.getElementById("message").value || " ";
     cfg.cell    = parseInt(document.getElementById("density").value, 10) || 16;
-    cfg.msgSize = (parseInt(document.getElementById("msgsize").value, 10) || 60) / 100;
+    cfg.msgSize = parseInt(document.getElementById("msgsize").value, 10) || 36;
   }
 
   // ---- p5 sketch ----
@@ -218,6 +223,34 @@
 
     const MSG_ALPHA = 55;
 
+    // Break str into rendered lines respecting maxWidth.
+    // Falls back to character-level breaking for words wider than the box.
+    function computeLines(str, maxWidth) {
+      const lines = [];
+      for (const para of str.split('\n')) {
+        if (para === '') { lines.push(''); continue; }
+        let line = '';
+        for (const word of para.split(' ')) {
+          if (!word) continue;
+          if (p.textWidth(word) > maxWidth) {
+            if (line) { lines.push(line); line = ''; }
+            let chars = '';
+            for (const ch of word) {
+              if (p.textWidth(chars + ch) > maxWidth) { lines.push(chars); chars = ch; }
+              else { chars += ch; }
+            }
+            line = chars;
+            continue;
+          }
+          const test = line ? line + ' ' + word : word;
+          if (p.textWidth(test) > maxWidth && line) { lines.push(line); line = word; }
+          else { line = test; }
+        }
+        if (line) lines.push(line);
+      }
+      return lines;
+    }
+
     function generate() {
       const sizeLg = cfg.cell * 2.5;
       const sizeMd = cfg.cell * 1.0;
@@ -248,17 +281,22 @@
 
       // Hidden message: cyan at low opacity — invisible to naked eye,
       // readable through a red filter (MULTIPLY zeroes the G+B channels).
+      const margin = 20;
+      const availW = cfg.w - margin * 2;
+      const availH = cfg.h - margin * 2;
       p.textStyle(p.NORMAL);
+      p.textSize(cfg.msgSize);
       p.fill(0, 255, 255, MSG_ALPHA);
-      let fs = cfg.h * cfg.msgSize;
-      p.textSize(fs);
-      const margin = cfg.w * 0.06;
-      const tw = p.textWidth(cfg.message);
-      if (tw > cfg.w - margin) {
-        fs = fs * (cfg.w - margin) / tw;
-        p.textSize(fs);
+      p.textAlign(p.LEFT, p.TOP);
+      const lineH = cfg.msgSize * 1.25;
+      const lines = computeLines(cfg.message, availW);
+      const startY = margin + Math.max(0, (availH - lines.length * lineH) / 2);
+      for (let i = 0; i < lines.length; i++) {
+        const ly = startY + i * lineH;
+        if (ly + lineH > cfg.h - margin) break;
+        p.text(lines[i], margin, ly);
       }
-      p.text(cfg.message, cfg.w / 2, cfg.h / 2);
+      p.textAlign(p.CENTER, p.CENTER);
 
       if (filterOn) {
         p.blendMode(p.MULTIPLY);
@@ -313,9 +351,9 @@
   document.getElementById("print").addEventListener("click", () => window.print());
 
   document.getElementById("reset").addEventListener("click", () => {
-    document.getElementById("message").value = "FOLLOW THE WHITE RABBIT";
+    document.getElementById("message").value = "FIND YOUR MEANING.";
     document.getElementById("density").value = 16;
-    document.getElementById("msgsize").value = 60;
+    document.getElementById("msgsize").value = 36;
     clearFilterUI();
     instance.rebuild();
   });
@@ -331,10 +369,6 @@
       instance.setSize(900, 600);
       document.getElementById("orient").textContent = "Switch to Portrait";
     }
-  });
-
-  document.getElementById("message").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { clearFilterUI(); instance.rebuild(); }
   });
 })();
 </script>
